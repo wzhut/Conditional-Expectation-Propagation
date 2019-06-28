@@ -1,0 +1,60 @@
+rng(0);
+
+num_sample = 10000;
+D = 4;
+
+% sigma function
+sigma = @(x) 1 ./ (1 + exp(-x));
+
+% sample theta
+theta = mvnrnd(zeros(D,1), eye(D));
+
+num_component = 5;
+mean_list = [-2 -1 0 1 2];
+std_list = [0.5 0.5 0.5 0.5 0.5];
+
+x = zeros(num_sample, D);
+% sample x
+for i = 1 : num_sample
+    idx = randi(num_component);
+    x(i,:) = mvnrnd(ones(D,1) * mean_list(idx), eye(D) * std_list(idx)^2);
+end
+
+% label y
+y = binornd(ones([num_sample 1]),  sigma(x * theta'));
+
+num_train = ceil(num_sample / 2);
+
+% train 
+train.x = x(1:num_train, :);
+train.y = y(1:num_train, :);
+% test
+test.x = x(num_train + 1:end, :);
+test.y = y(num_train + 1:end, :);
+
+% estimate mean and variance
+
+theta0 = zeros(D,1);
+        
+f = @(theta) gradLogitPosterior(theta, train.y, train.x);
+%burning in
+n_warmup = 100000;
+%after burn-in
+n_mcmc_samples = 50000;
+[samples, logp_samples] = NUTS_wrapper(f, theta0, n_warmup, n_mcmc_samples);
+%         plot(1:n_mcmc_samples, logp_samples);
+res_samples = samples(:, 1:10:end);
+%         ess = ESS(samples);
+
+sample_size = size(res_samples, 2);
+ts_mean = mean(res_samples,2);
+ts_var = zeros(D,D);
+for k = 1 : sample_size
+    ts_var = ts_var + (res_samples(:, k) - ts_mean) * (res_samples(:, k) - ts_mean)';
+end
+ts_var = ts_var / (sample_size - 1);
+
+save('simulation2', 'train', 'test', 'ts_mean', 'ts_var');
+
+
+
